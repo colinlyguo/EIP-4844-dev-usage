@@ -582,7 +582,7 @@ def point_evaluation_precompile(input: Bytes) -> Bytes:
     # 验证承诺与 versioned_hash 是否匹配
     assert kzg_to_versioned_hash(commitment) == versioned_hash
 
-    # 使用 z 和 y （大段格式） 验证 KZG 证明
+    # 使用 z 和 y （大端格式） 验证 KZG 证明
     assert verify_kzg_proof(commitment, z, y, proof)
 
     #  返回 FIELD_ELEMENTS_PER_BLOB 和 BLS_MODULUS 扩展到 32 字节大端值
