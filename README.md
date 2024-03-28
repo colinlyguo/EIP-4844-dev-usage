@@ -467,7 +467,7 @@ Blob Gas: 131072 (0x20000) per blob, 1 per byte, but the minimum unit for adding
 - **Some Intuitions**:
     - Calldata is used for many purposes: contract call, rollup DA, etc. → blob is cheaper!
     - Only a 32 bytes hash of blob commitment is available in the EVM, designed for rollup. → blob is cheaper!
-    - Blob is a relatively scarce resource, currently aiming for 3 blobs per block, whereas each transaction can include a calldata field, accommodating hundreds of transactions per block. → if blob transactions become congested, calldata may even be cheaper!
+    - Blob is a relatively scarce resource, currently aiming for 6 blobs per block, whereas each transaction can include a calldata field, accommodating hundreds of transactions per block. → if blob transactions become congested, calldata may even be cheaper!
 
 - **Statistics**:
     - Blobscan's dashboards: [Sepolia](https://sepolia.blobscan.com/stats/block) and [Goerli](https://goerli.blobscan.com/stats/block). Note that a zero byte in blob (not known whether it's a valid 0, or a dummy value) is considered a zero byte in calldata, thus the savings are over-estimated. And it would be more useful to add dashboards for gas fee comparison.
