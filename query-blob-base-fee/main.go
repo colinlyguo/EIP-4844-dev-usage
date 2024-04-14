@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/big"
 	"os"
+	"time"
 
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -41,6 +42,10 @@ func main() {
 		fetchedBlockCount uint64
 	)
 
+	log.Info("Starting to fetch block headers", "startBlock", latestSafeBlockNumber-numBlocksToFetch+1, "endBlock", latestSafeBlockNumber)
+
+	startTime := time.Now()
+
 	for i := latestSafeBlockNumber; i > latestSafeBlockNumber-numBlocksToFetch && i > 0; i-- {
 		header, err := client.HeaderByNumber(context.Background(), big.NewInt(int64(i)))
 		if err != nil {
@@ -49,15 +54,30 @@ func main() {
 		}
 
 		blobBaseFee := eip4844.CalcBlobFee(*header.ExcessBlobGas)
-		totalBaseFee = totalBaseFee + header.BaseFee.Uint64()
-		totalBlobBaseFee = totalBlobBaseFee + blobBaseFee.Uint64()
-		totalBlobNumber = totalBlobNumber + (*header.BlobGasUsed)/131072
+		totalBaseFee += header.BaseFee.Uint64()
+		totalBlobBaseFee += blobBaseFee.Uint64()
+		totalBlobNumber += (*header.BlobGasUsed) / 131072
 		fetchedBlockCount++
+
+		if fetchedBlockCount%10 == 0 {
+			log.Info("Fetched block headers", "count", fetchedBlockCount)
+		}
 	}
 
-	avgBaseFee := 1.0 * totalBaseFee / fetchedBlockCount
-	avgBlobBaseFee := 1.0 * totalBlobBaseFee / fetchedBlockCount
-	avgBlobNumber := 1.0 * totalBlobNumber / fetchedBlockCount
+	elapsedTime := time.Since(startTime)
+	log.Info("Finished fetching block headers", "elapsedTime", elapsedTime)
 
-	log.Info("Network statistics", "numBlocks", fetchedBlockCount, "startBlock", latestSafeBlockNumber-numBlocksToFetch+1, "endBlock", latestSafeBlockNumber, "avgBaseFee", avgBaseFee, "avgBlobBaseFee", avgBlobBaseFee, "avgBlobNumber", avgBlobNumber, "estimated calldata cost / blob cost", 16*avgBaseFee/avgBlobBaseFee)
+	avgBaseFee := float64(totalBaseFee) / float64(fetchedBlockCount)
+	avgBlobBaseFee := float64(totalBlobBaseFee) / float64(fetchedBlockCount)
+	avgBlobNumber := float64(totalBlobNumber) / float64(fetchedBlockCount)
+
+	log.Info("Network statistics",
+		"numBlocks", fetchedBlockCount,
+		"startBlock", latestSafeBlockNumber-numBlocksToFetch+1,
+		"endBlock", latestSafeBlockNumber,
+		"avgBaseFee", avgBaseFee,
+		"avgBlobBaseFee", avgBlobBaseFee,
+		"avgBlobNumber", avgBlobNumber,
+		"estimated calldata cost / blob cost", 16*avgBaseFee/avgBlobBaseFee,
+	)
 }
