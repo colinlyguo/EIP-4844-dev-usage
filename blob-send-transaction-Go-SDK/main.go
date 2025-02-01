@@ -12,12 +12,15 @@ import (
 	gokzg4844 "github.com/crate-crypto/go-kzg-4844"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/ethclient/gethclient"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/holiman/uint256"
 	"github.com/joho/godotenv"
 )
@@ -45,45 +48,64 @@ func main() {
 	}
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-	client, err := ethclient.Dial(os.Getenv("RPC_PROVIDER_URL"))
+	rpcClient, err := rpc.Dial(os.Getenv("RPC_PROVIDER_URL"))
 	if err != nil {
 		log.Crit("failed to connect to network", "err", err)
 	}
 
-	chainID, err := client.NetworkID(context.Background())
+	ethClient := ethclient.NewClient(rpcClient)
+	gethClient := gethclient.New(rpcClient)
+
+	chainID, err := ethClient.NetworkID(context.Background())
 	if err != nil {
 		log.Crit("failed to get network ID", "err", err)
 	}
 
-	nonce, err := client.PendingNonceAt(context.Background(), fromAddress)
+	nonce, err := ethClient.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
 		log.Crit("failed to get pending nonce", "err", err)
 	}
 
-	gasTipCap, err := client.SuggestGasTipCap(context.Background())
+	gasTipCap, err := ethClient.SuggestGasTipCap(context.Background())
 	if err != nil {
 		log.Crit("failed to get suggest gas tip cap", "err", err)
 	}
 
-	gasFeeCap, err := client.SuggestGasPrice(context.Background())
+	gasFeeCap, err := ethClient.SuggestGasPrice(context.Background())
 	if err != nil {
 		log.Crit("failed to get suggest gas price", "err", err)
 	}
 
-	gasLimit, err := client.EstimateGas(context.Background(),
-		ethereum.CallMsg{
-			From:      fromAddress,
-			To:        &fromAddress,
-			GasFeeCap: gasFeeCap,
-			GasTipCap: gasTipCap,
-			Value:     big.NewInt(0),
-		})
+	msg := ethereum.CallMsg{
+		From:      fromAddress,
+		To:        &fromAddress,
+		GasFeeCap: gasFeeCap,
+		GasTipCap: gasTipCap,
+		Value:     big.NewInt(0),
+	}
+
+	gasLimitWithoutAccessList, err := ethClient.EstimateGas(context.Background(), msg)
 	if err != nil {
 		log.Crit("failed to estimate gas", "err", err)
 	}
 
+	// Explicitly set a gas limit to prevent the "insufficient funds for gas * price + value" error.
+	// Because if msg.Gas remains unset, CreateAccessList defaults to using RPCGasCap(), which can be excessively high.
+	msg.Gas = gasLimitWithoutAccessList * 3
+	accessList, gasLimitWithAccessList, errStr, rpcErr := gethClient.CreateAccessList(context.Background(), msg)
+	if rpcErr != nil {
+		log.Crit("CreateAccessList RPC error", "error", rpcErr)
+	}
+	if errStr != "" {
+		log.Crit("CreateAccessList reported error", "error", errStr)
+	}
+
+	// Fine-tune accessList because the 'to' address is automatically included in the access list by the Ethereum protocol: https://github.com/ethereum/go-ethereum/blob/v1.13.13/core/state/statedb.go#L1322
+	// This function returns a recalculated gas estimation based on the adjusted access list.
+	accessList, gasLimitWithAccessList = finetuneAccessList(accessList, gasLimitWithAccessList, msg.To)
+
 	// Estimate pending block's blobFeeCap.
-	parentHeader, err := client.HeaderByNumber(context.Background(), nil)
+	parentHeader, err := ethClient.HeaderByNumber(context.Background(), nil)
 	if err != nil {
 		log.Crit("failed to get previous block header", "err", err)
 	}
@@ -96,29 +118,33 @@ func main() {
 	sideCar := makeSidecar([]kzg4844.Blob{blob})
 	blobHashes := sideCar.BlobHashes()
 
-	tx := types.NewTx(&types.BlobTx{
+	blobTx := &types.BlobTx{
 		ChainID:    uint256.MustFromBig(chainID),
 		Nonce:      nonce,
 		GasTipCap:  uint256.MustFromBig(gasTipCap),
 		GasFeeCap:  uint256.MustFromBig(gasFeeCap),
-		Gas:        gasLimit * 12 / 10,
+		Gas:        gasLimitWithAccessList * 12 / 10,
 		To:         fromAddress,
 		BlobFeeCap: uint256.MustFromBig(blobFeeCap),
 		BlobHashes: blobHashes,
 		Sidecar:    sideCar,
-	})
+	}
+
+	if accessList != nil {
+		blobTx.AccessList = *accessList
+	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	if err != nil {
 		log.Crit("failed to create transactor", "chainID", chainID, "err", err)
 	}
 
-	signedTx, err := auth.Signer(auth.From, tx)
+	signedTx, err := auth.Signer(auth.From, types.NewTx(blobTx))
 	if err != nil {
 		log.Crit("failed to sign the transaction", "err", err)
 	}
 
-	err = client.SendTransaction(context.Background(), signedTx)
+	err = ethClient.SendTransaction(context.Background(), signedTx)
 	if err != nil {
 		log.Crit("failed to send the transaction", "err", err)
 	}
@@ -131,6 +157,8 @@ func main() {
 		"gasFeeCap", signedTx.GasFeeCap(),
 		"gasLimit", signedTx.Gas(),
 		"to", signedTx.To(),
+		"accessList", signedTx.AccessList(),
+		"data", signedTx.Data(),
 		"blobFeeCap", signedTx.BlobGasFeeCap(),
 		"blobHashes", signedTx.BlobHashes())
 
@@ -142,11 +170,11 @@ func main() {
 	for {
 		time.Sleep(15 * time.Second)
 
-		_, isPending, err := client.TransactionByHash(context.Background(), signedTx.Hash())
+		_, isPending, err := ethClient.TransactionByHash(context.Background(), signedTx.Hash())
 		if err != nil || isPending {
 			log.Warn("failed to get transaction by hash or the tx is still pending", "hash", signedTx.Hash().String(), "err", err, "isPending", isPending)
 
-			currentBlockNumber, err := client.BlockNumber(context.Background())
+			currentBlockNumber, err := ethClient.BlockNumber(context.Background())
 			if err != nil {
 				log.Crit("failed to get current block number", "err", err)
 			}
@@ -161,7 +189,7 @@ func main() {
 					Nonce:      nonce,
 					GasTipCap:  uint256.MustFromBig(gasTipCap),
 					GasFeeCap:  uint256.MustFromBig(gasFeeCap),
-					Gas:        gasLimit * 12 / 10,
+					Gas:        gasLimitWithAccessList * 12 / 10,
 					To:         fromAddress,
 					BlobFeeCap: uint256.MustFromBig(blobFeeCap),
 					BlobHashes: blobHashes,
@@ -178,7 +206,7 @@ func main() {
 					log.Crit("failed to sign the transaction", "err", err)
 				}
 
-				err = client.SendTransaction(context.Background(), signedTx)
+				err = ethClient.SendTransaction(context.Background(), signedTx)
 				if err != nil {
 					log.Crit("failed to send the transaction", "err", err)
 				}
@@ -200,7 +228,7 @@ func main() {
 			continue
 		}
 
-		receipt, err = client.TransactionReceipt(context.Background(), signedTx.Hash())
+		receipt, err = ethClient.TransactionReceipt(context.Background(), signedTx.Hash())
 		if err != nil {
 			log.Crit("failed to get transaction receipt", "err", err)
 		}
@@ -254,4 +282,26 @@ func randFieldElement() [32]byte {
 	r.SetBytes(bytes)
 
 	return gokzg4844.SerializeScalar(r)
+}
+
+func finetuneAccessList(accessList *types.AccessList, gasLimitWithAccessList uint64, to *common.Address) (*types.AccessList, uint64) {
+	if accessList == nil || to == nil {
+		return accessList, gasLimitWithAccessList
+	}
+
+	var newAccessList types.AccessList
+	for _, entry := range *accessList {
+		if entry.Address == *to && len(entry.StorageKeys) <= 24 {
+			// Based on: https://arxiv.org/pdf/2312.06574.pdf
+			// We remove the address and respective storage keys as long as the number of storage keys <= 24.
+			// This removal helps in preventing double-counting of the 'to' address in access list calculations.
+			gasLimitWithAccessList -= 2400
+			// Each storage key saves 100 gas units.
+			gasLimitWithAccessList += uint64(100 * len(entry.StorageKeys))
+		} else {
+			// Otherwise, keep the entry in the new access list.
+			newAccessList = append(newAccessList, entry)
+		}
+	}
+	return &newAccessList, gasLimitWithAccessList
 }
