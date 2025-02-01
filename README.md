@@ -15,9 +15,9 @@ Blob transaction is a new transaction type of [EIP-2718: Typed Transaction Envel
 
 - **TransactionPayload**: The payload for a blob transaction is structured as: `rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, to, value, data, access_list, max_fee_per_blob_gas, blob_versioned_hashes, y_parity, r, s])`.
     - `max_fee_per_blob_gas (uint256)`: The maximum blob gas fee the sender is willing to pay. The actual fee charged is the blob base fee of the block.
-    - `blob_versioned_hashes`: An array of hashes that can be used to verify the integrity of the blob content. Each hash is a single 0x01 byte (representing the version) followed by the last 31 bytes of the SHA256 hash of the KZG. This approach is designed for [EVM-compatibility and future-compatibility](https://notes.ethereum.org/@vbuterin/proto_danksharding_faq#Why-use-the-hash-of-the-KZG-instead-of-the-KZG-directly).
+    - `blob_versioned_hashes`: An array of hashes that can be used to verify the integrity of the blob content. Each hash starts with a 0x01 byte (representing the version) followed by the last 31 bytes of the SHA256 hash of the KZG. This approach is designed for [EVM-compatibility and future-compatibility](https://notes.ethereum.org/@vbuterin/proto_danksharding_faq#Why-use-the-hash-of-the-KZG-instead-of-the-KZG-directly).
 
-> **Note**: The `gas_limit` does not account for blob gas, which is calculated separately, `131072 (0x20000)` per blob.
+> **Note**: The `gas_limit` does not account for blob gas. The blob gas is calculated separately by `131072 (0x20000)` per blob.
 
 ### Transaction Receipt Structure
 
@@ -42,7 +42,15 @@ In the networking layer of EIP-4844, blob transactions use a different format fo
 Send blob transaction:
 
 ```shell
-curl --data '{"jsonrpc":"2.0","method":"eth_sendRawTransaction","params":["0x03fa..."],"id":1}' -H "Content-Type: application/json" -X POST $RPC_PROVIDER_URL | jq
+curl --data '{
+  "jsonrpc": "2.0",
+  "method": "eth_sendRawTransaction",
+  "params": ["0x03fa..."],
+  "id": 1
+}' \
+-H "Content-Type: application/json" \
+-X POST \
+$RPC_PROVIDER_URL | jq
 ```
 
 ```json
@@ -53,10 +61,20 @@ curl --data '{"jsonrpc":"2.0","method":"eth_sendRawTransaction","params":["0x03f
 }
 ```
 
-Get blob transaction body (the standard EIP-2718 blob transaction `TransactionPayload` is used):
+Get blob transaction (the standard EIP-2718 blob transaction `TransactionPayload` is used):
 
 ```shell
-curl --data '{"jsonrpc":"2.0","method":"eth_getTransactionByHash","params":["0x50dc1e2ec14cafb5acac600debe7b8765c73cbb7105ea33121284c3538ffbbc6"],"id":1}' -H 'Content-Type: application/json' -X POST $RPC_PROVIDER_URL | jq
+curl --data '{
+  "jsonrpc": "2.0",
+  "method": "eth_getTransactionByHash",
+  "params": [
+    "0x50dc1e2ec14cafb5acac600debe7b8765c73cbb7105ea33121284c3538ffbbc6"
+  ],
+  "id": 1
+}' \
+-H "Content-Type: application/json" \
+-X POST \
+$RPC_PROVIDER_URL | jq
 ```
 
 ```json
@@ -95,7 +113,17 @@ curl --data '{"jsonrpc":"2.0","method":"eth_getTransactionByHash","params":["0x5
 Get blob transaction receipt:
 
 ```shell
-curl --data '{"jsonrpc":"2.0","method":"eth_getTransactionReceipt","params":["0x50dc1e2ec14cafb5acac600debe7b8765c73cbb7105ea33121284c3538ffbbc6"],"id":1}' -H 'Content-Type: application/json' -X POST $RPC_PROVIDER_URL | jq
+curl --data '{
+  "jsonrpc": "2.0",
+  "method": "eth_getTransactionReceipt",
+  "params": [
+    "0x50dc1e2ec14cafb5acac600debe7b8765c73cbb7105ea33121284c3538ffbbc6"
+  ],
+  "id": 1
+}' \
+-H "Content-Type: application/json" \
+-X POST \
+$RPC_PROVIDER_URL | jq
 ```
 
 ```json
@@ -127,9 +155,7 @@ curl --data '{"jsonrpc":"2.0","method":"eth_getTransactionReceipt","params":["0x
 
 [The script with the generated curl command](./blob-eth_sendRawTransaction-curl-generator/blob_eth_sendRawTransaction.sh): run with `./blob_eth_sendRawTransaction.sh`.
 
-[Etherscan](https://sepolia.etherscan.io/tx/0x50dc1e2ec14cafb5acac600debe7b8765c73cbb7105ea33121284c3538ffbbc6): searching for info on non-blob fields, better UX and more info for now.
-
-[Blobscan](https://sepolia.blobscan.com/tx/0x4b97a7378f4d63fb07d0424fee2dabc810ec263cb6f9d5b23f9b6b8e01226b05): searching for info on blob field fields.
+View transaction on [Etherscan](https://sepolia.etherscan.io/tx/0x50dc1e2ec14cafb5acac600debe7b8765c73cbb7105ea33121284c3538ffbbc6) and [Blobscan](https://sepolia.blobscan.com/tx/0x50dc1e2ec14cafb5acac600debe7b8765c73cbb7105ea33121284c3538ffbbc6).
 
 > **Note**: An RPC provider URL is required, or you need to run a node to execute the above curl commands, and test it only in testnet to prevent fund loss.
 
@@ -138,21 +164,7 @@ curl --data '{"jsonrpc":"2.0","method":"eth_getTransactionReceipt","params":["0x
 Send blob transaction:
 
 ```shell
-curl --data '{"jsonrpc":"2.0","method":"eth_sendTransaction","params":[{"accessList":[],"blobVersionedHashes":["0x01ce755b14983c26efbad511bb2594f9aba54d199ffe762b507a1b5a9d4b3a61"],"blobs":["0x0001..."],"chainId":"0xaa36a7","commitments":["0x854288889c16ba728d66f58ef6f40a2e0041a89e0453b1af934bf45c8a0e26e48e35cb3abade84db8b39d65b85265e3f"],"from":"0xd932073c0350d17057b6da602356b2ae92648465","gas":"0x6270","gasPrice":null,"hash":"0x23f2cbce16c8a144a653d9f919741143129d701f2cbe6cd7649b343ae6d0f0d3","input":"0x","maxFeePerBlobGas":"0x385d3c6730","maxFeePerGas":"0xed46be3a46","maxPriorityFeePerGas":"0x2540be400","nonce":"0x29","proofs":["0xb54876f23a0bcf4d95d05bafd3091676562447b3a31ae1caaad208fb794a53aad24336fe0c636a882081aa57d220abb4"],"r":"0x0","s":"0x0","to":"0xd932073c0350d17057b6da602356b2ae92648465","type":"0x3","v":"0x0","value":"0x0","yParity":"0x0"}],"id":1}' -H "Content-Type: application/json" -X POST http://127.0.0.1:8545 | jq
-```
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": "0x158173e2e27938f0605232e32f5fd524506439b7555d027b273bb70d07a3c899"
-}
-```
-
-JSON Payload of `eth_sendTransaction`:
-
-```json
-{
+curl --data '{
   "jsonrpc": "2.0",
   "method": "eth_sendTransaction",
   "params": [
@@ -190,13 +202,34 @@ JSON Payload of `eth_sendTransaction`:
     }
   ],
   "id": 1
+}' \
+-H "Content-Type: application/json" \
+-X POST \
+http://127.0.0.1:8545 | jq
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": "0x158173e2e27938f0605232e32f5fd524506439b7555d027b273bb70d07a3c899"
 }
 ```
 
-Get blob transaction body (the standard EIP-2718 blob transaction `TransactionPayload` is used):
+Get blob transaction (the standard EIP-2718 blob transaction `TransactionPayload` is used):
 
 ```shell
-curl --data '{"jsonrpc":"2.0","method":"eth_getTransactionByHash","params":["0x158173e2e27938f0605232e32f5fd524506439b7555d027b273bb70d07a3c899"],"id":1}' -H 'Content-Type: application/json' -X POST $RPC_PROVIDER_URL | jq
+curl --data '{
+  "jsonrpc": "2.0",
+  "method": "eth_getTransactionByHash",
+  "params": [
+    "0x158173e2e27938f0605232e32f5fd524506439b7555d027b273bb70d07a3c899"
+  ],
+  "id": 1
+}' \
+-H "Content-Type: application/json" \
+-X POST \
+$RPC_PROVIDER_URL | jq
 ```
 
 ```json
@@ -235,7 +268,17 @@ curl --data '{"jsonrpc":"2.0","method":"eth_getTransactionByHash","params":["0x1
 Get blob transaction receipt:
 
 ```shell
-curl --data '{"jsonrpc":"2.0","method":"eth_getTransactionReceipt","params":["0x158173e2e27938f0605232e32f5fd524506439b7555d027b273bb70d07a3c899"],"id":1}' -H 'Content-Type: application/json' -X POST http://127.0.0.1:8545 | jq
+curl --data '{
+  "jsonrpc": "2.0",
+  "method": "eth_getTransactionReceipt",
+  "params": [
+    "0x158173e2e27938f0605232e32f5fd524506439b7555d027b273bb70d07a3c899"
+  ],
+  "id": 1
+}' \
+-H "Content-Type: application/json" \
+-X POST \
+http://127.0.0.1:8545 | jq
 ```
 
 ```json
@@ -267,15 +310,13 @@ curl --data '{"jsonrpc":"2.0","method":"eth_getTransactionReceipt","params":["0x
 
 [The script with the generated curl command](./blob-eth_sendTransaction-curl-generator/blob_eth_sendTransaction.sh): run with `./blob_eth_sendTransaction.sh`.
 
-[Etherscan](https://sepolia.etherscan.io/tx/0x158173e2e27938f0605232e32f5fd524506439b7555d027b273bb70d07a3c899): searching for info on non-blob fields, better UX and more info for now.
-
-[Blobscan](https://sepolia.blobscan.com/tx/0x158173e2e27938f0605232e32f5fd524506439b7555d027b273bb70d07a3c899): searching for info on blob field fields.
+View transaction on [Etherscan](https://sepolia.etherscan.io/tx/0x158173e2e27938f0605232e32f5fd524506439b7555d027b273bb70d07a3c899) and [Blobscan](https://sepolia.blobscan.com/tx/0x158173e2e27938f0605232e32f5fd524506439b7555d027b273bb70d07a3c899).
 
 > **Note**: Most RPC providers (such as Infura and Alchemy) do not offer `eth_sendTransaction`.
 
-> **Note**: For Geth: [A work-in-progress feature but almost done](https://github.com/ethereum/go-ethereum/pull/28976), need to tweak some code currently. Signature fields are ignored and Geth would use the unlocked account the sign the transaction.
+> **Note**: For self-hosting Geth node: Signature fields are ignored and Geth would use the unlocked account to sign the transaction.
 
-### Go-SDK (Using `eth_sendRawTransaction` underneath)
+### Go-SDK (Using `eth_sendRawTransaction`)
 
 Construct Non-blob Fields (the same as EIP-1559 transactions):
 
@@ -291,43 +332,84 @@ if !ok {
 }
 fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-client, err := ethclient.Dial(os.Getenv("RPC_PROVIDER_URL"))
+rpcClient, err := rpc.Dial(os.Getenv("RPC_PROVIDER_URL"))
 if err != nil {
 	log.Crit("failed to connect to network", "err", err)
 }
 
-chainID, err := client.NetworkID(context.Background())
+ethClient := ethclient.NewClient(rpcClient)
+gethClient := gethclient.New(rpcClient)
+
+chainID, err := ethClient.NetworkID(context.Background())
 if err != nil {
 	log.Crit("failed to get network ID", "err", err)
 }
 
-nonce, err := client.PendingNonceAt(context.Background(), fromAddress)
+nonce, err := ethClient.PendingNonceAt(context.Background(), fromAddress)
 if err != nil {
 	log.Crit("failed to get pending nonce", "err", err)
 }
 
-gasTipCap, err := client.SuggestGasTipCap(context.Background())
+gasTipCap, err := ethClient.SuggestGasTipCap(context.Background())
 if err != nil {
 	log.Crit("failed to get suggest gas tip cap", "err", err)
 }
 
-gasFeeCap, err := client.SuggestGasPrice(context.Background())
+gasFeeCap, err := ethClient.SuggestGasPrice(context.Background())
 if err != nil {
 	log.Crit("failed to get suggest gas price", "err", err)
 }
 
-gasLimit, err := client.EstimateGas(context.Background(),
-	ethereum.CallMsg{
-		From:       fromAddress,
-		To:         &fromAddress,
-		GasFeeCap:  gasFeeCap,
-		GasTipCap:  gasTipCap,
-		Value:      big.NewInt(0),
-		// Provide BlobHash here if the transaction is a contract call,
-		// and the contract uses blobhash opcode internally.
-	})
+msg := ethereum.CallMsg{
+	From:      fromAddress,
+	To:        &fromAddress,
+	GasFeeCap: gasFeeCap,
+	GasTipCap: gasTipCap,
+	Value:     big.NewInt(0),
+	// Provide BlobHash here if the transaction is a contract call,
+	// and the contract uses blobhash opcode internally.
+}
+
+gasLimitWithoutAccessList, err := ethClient.EstimateGas(context.Background(), msg)
 if err != nil {
 	log.Crit("failed to estimate gas", "err", err)
+}
+
+// Explicitly set a gas limit to prevent the "insufficient funds for gas * price + value" error.
+// Because if msg.Gas remains unset, CreateAccessList defaults to using RPCGasCap(), which can be excessively high.
+msg.Gas = gasLimitWithoutAccessList * 3
+accessList, gasLimitWithAccessList, errStr, rpcErr := gethClient.CreateAccessList(context.Background(), msg)
+if rpcErr != nil {
+	log.Crit("CreateAccessList RPC error", "error", rpcErr)
+}
+if errStr != "" {
+	log.Crit("CreateAccessList reported error", "error", errStr)
+}
+
+// Fine-tune accessList because the 'to' address is automatically included in the access list by the Ethereum protocol: https://github.com/ethereum/go-ethereum/blob/v1.13.13/core/state/statedb.go#L1322
+// This function returns a recalculated gas estimation based on the adjusted access list.
+accessList, gasLimitWithAccessList = finetuneAccessList(accessList, gasLimitWithAccessList, msg.To)
+
+func finetuneAccessList(accessList *types.AccessList, gasLimitWithAccessList uint64, to *common.Address) (*types.AccessList, uint64) {
+	if accessList == nil || to == nil {
+		return accessList, gasLimitWithAccessList
+	}
+
+	var newAccessList types.AccessList
+	for _, entry := range *accessList {
+		if entry.Address == *to && len(entry.StorageKeys) <= 24 {
+			// Based on: https://arxiv.org/pdf/2312.06574.pdf
+			// We remove the address and respective storage keys as long as the number of storage keys <= 24.
+			// This removal helps in preventing double-counting of the 'to' address in access list calculations.
+			gasLimitWithAccessList -= 2400
+			// Each storage key saves 100 gas units.
+			gasLimitWithAccessList += uint64(100 * len(entry.StorageKeys))
+		} else {
+			// Otherwise, keep the entry in the new access list.
+			newAccessList = append(newAccessList, entry)
+		}
+	}
+	return &newAccessList, gasLimitWithAccessList
 }
 ```
 
@@ -370,34 +452,38 @@ func makeSidecar(blobs []kzg4844.Blob) *types.BlobTxSidecar {
 
 > **Note**: A blob transaction can have 0 to 6 blobs because the maximum blobs per block are `MAX_BLOB_GAS_PER_BLOCK` / `GAS_PER_BLOB` = 786432 / 131072 = 6.
 
-> **Note**: Geth's transaction pool (the most widely adopted execution client) will reject blob transactions with 0 blob, returning `blobless blob transaction` error when [validating a transaction before adding it to tx pool](https://github.com/ethereum/go-ethereum/blob/93c541ad563124e81d125c7ebe78938175229b2e/core/txpool/validation.go#L120-L122).
+> **Note**: Geth's transaction pool (a widely adopted execution client) will reject blob transactions with 0 blob, [returning `blobless blob transaction` error when validating a transaction before adding it to tx pool](https://github.com/ethereum/go-ethereum/blob/93c541ad563124e81d125c7ebe78938175229b2e/core/txpool/validation.go#L120-L122).
 
 Sign and Send the Transaction:
 
 ```golang
-tx := types.NewTx(&types.BlobTx{
+blobTx := &types.BlobTx{
 	ChainID:    uint256.MustFromBig(chainID),
 	Nonce:      nonce,
 	GasTipCap:  uint256.MustFromBig(gasTipCap),
 	GasFeeCap:  uint256.MustFromBig(gasFeeCap),
-	Gas:        gasLimit * 12 / 10,
+	Gas:        gasLimitWithAccessList * 12 / 10,
 	To:         fromAddress,
 	BlobFeeCap: uint256.MustFromBig(blobFeeCap),
 	BlobHashes: blobHashes,
 	Sidecar:    sideCar,
-})
+}
+
+if accessList != nil {
+	blobTx.AccessList = *accessList
+}
 
 auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 if err != nil {
 	log.Crit("failed to create transactor", "chainID", chainID, "err", err)
 }
 
-signedTx, err := auth.Signer(auth.From, tx)
+signedTx, err := auth.Signer(auth.From, types.NewTx(blobTx))
 if err != nil {
 	log.Crit("failed to sign the transaction", "err", err)
 }
 
-err = client.SendTransaction(context.Background(), signedTx)
+err = ethClient.SendTransaction(context.Background(), signedTx)
 if err != nil {
 	log.Crit("failed to send the transaction", "err", err)
 }
@@ -434,7 +520,7 @@ def fake_exponential(factor: int, numerator: int, denominator: int) -> int:
 
 `MIN_BLOB_BASE_FEE` is 1 wei.
 
-`excess_blob_gas` represents the "extra" accumulated gas used historically than `TARGET_BLOB_GAS_PER_BLOCK` * `Totel Number of Blocks`, but it's bounded at 0 (>= 0).
+`excess_blob_gas` represents the "extra" accumulated gas used historically than `TARGET_BLOB_GAS_PER_BLOCK * Totel Number of Blocks`, but it's bounded at 0 (>= 0).
 
 `BLOB_BASE_FEE_UPDATE_FRACTION` is 3338477, which controls the increasing ratio of blob base fee.
 
@@ -469,8 +555,8 @@ Blob Gas: 131072 (0x20000) per blob, 1 per byte, but the minimum unit for adding
     - Only a 32 bytes hash of blob commitment is available in the EVM, designed for rollup. → blob is cheaper!
     - Blob is a relatively scarce resource, currently aiming for 3 blobs per block, whereas each transaction can include a calldata field, accommodating hundreds of transactions per block. → if blob transactions become congested, calldata may even be cheaper!
 
-- **Statistics**:
-    - Blobscan's dashboards: [Sepolia](https://sepolia.blobscan.com/stats/block) and [Goerli](https://goerli.blobscan.com/stats/block). Note that a zero byte in blob (not known whether it's a valid 0, or a dummy value) is considered a zero byte in calldata, thus the savings are over-estimated. And it would be more useful to add dashboards for gas fee comparison.
+- **Tools**:
+    - An example of cost comparison in [Etherscan](https://etherscan.io/tx/0x534284534dbad33a0683668b953ddfa7def3d328c737e6165b24691c71cef891#blobs) and [Blobscan](https://blobscan.com/tx/0x534284534dbad33a0683668b953ddfa7def3d328c737e6165b24691c71cef891): Note that a zero byte in blob (not known whether it's a valid 0, or a dummy value) is considered a zero byte in calldata, thus the saving is over-estimated.
 
 - **Other Possibilities**:
     - Using private transaction services (e.g., flashbots), which can directly pay tips to the builder.
@@ -481,6 +567,7 @@ Just increasing the effective tip as EIP-1559 transactions: `min(exec tip, exec 
 
 - [Geth](https://github.com/ethereum/go-ethereum/blob/93c541ad563124e81d125c7ebe78938175229b2e/miner/ordering.go#L62-L70) and [Nethermind](https://github.com/NethermindEth/nethermind/blob/bf658d8525d8b1b3007c49ddc38b12a061e033a2/src/Nethermind/Nethermind.Consensus/Comparers/GasPriceTxComparerHelper.cs#L11-L30) use priority fee when selecting transactions from transaction pool.
 - Even for a more sophisticated MEV strategy (e.g., solving a multidimensional knapsack problem), bumping the effective tip also brings higher revenue to the block builder.
+
 ### Bumping Fees for Pending Transactions (Replacing a transaction with the same nonce)
 
 Due to blob pool's constraints for minimum bumping ratio (e.g., [Geth](https://github.com/ethereum/go-ethereum/blob/93c541ad563124e81d125c7ebe78938175229b2e/core/txpool/blobpool/blobpool.go#L1145-L1150) and [Nethermind](https://github.com/NethermindEth/nethermind/blob/bf658d8525d8b1b3007c49ddc38b12a061e033a2/src/Nethermind/Nethermind.TxPool/Comparison/CompareReplacedBlobTx.cs#L30-L32)). One needs to bump the `exec tip`, `exec cap` and `blob cap` aggressively for at least 100% to replace a sent transaction, this defense is added to prevent DoS attack since the payload of a blob transaction is large.
@@ -499,7 +586,7 @@ tx := types.NewTx(&types.BlobTx{
 	Nonce:      nonce,
 	GasTipCap:  uint256.MustFromBig(gasTipCap),
 	GasFeeCap:  uint256.MustFromBig(gasFeeCap),
-	Gas:        gasLimit * 12 / 10,
+	Gas:        gasLimitWithAccessList * 12 / 10,
 	To:         fromAddress,
 	BlobFeeCap: uint256.MustFromBig(blobFeeCap),
 	BlobHashes: blobHashes,
@@ -516,7 +603,7 @@ if err != nil {
 	log.Crit("failed to sign the transaction", "err", err)
 }
 
-err = client.SendTransaction(context.Background(), signedTx)
+err = ethClient.SendTransaction(context.Background(), signedTx)
 if err != nil {
 	log.Crit("failed to send the transaction", "err", err)
 }
@@ -528,9 +615,9 @@ if err != nil {
 
 ## Troubleshooting Based on Blob Pool Implementation
 
-Transactions are propagated through the Ethereum network by gossip protocol and are temporarily stored in the transaction pool. Because blob transactions carry a large payload, major clients implement certain constraints in their transaction pools. Highlighting a few of these constraints can be key for troubleshooting, preventing blob transactions from being rejected or deprioritized (stuck).
+Transactions are propagated through the Ethereum network by gossip protocol and are temporarily stored in the transaction pool. Because blob transactions carry a large payload, major clients implement certain constraints in their transaction pools. Highlighting a few of these constraints can be key for troubleshooting, preventing blob transactions from being rejected or deprioritized (stuck). We use Geth and Nethermind as examples.
 
-### Geth (The dominant execution client, many RPC providers are based on it):
+### Geth (many RPC providers are based on it):
 
 - An address cannot both hold transactions in legacy pool and the blob pool: `address already reserved`.
 - Requires a significant `exec tip`, `exec cap` and `blob cap` bump (100%) to replace a transaction: `replacement transaction underpriced`.
@@ -542,7 +629,7 @@ Transactions are propagated through the Ethereum network by gossip protocol and 
 
 > **Note**: [Geth's blob pool "handbook"](https://github.com/ethereum/go-ethereum/blob/93c541ad563124e81d125c7ebe78938175229b2e/core/txpool/blobpool/blobpool.go#L132-L293).
 
-### Nethermind (The runner-up in terms of execution client usage):
+### Nethermind:
 
 - Set flags explicitly to enable blob pool.
 - An address cannot both hold transactions in legacy pool and the blob pool.
@@ -564,6 +651,7 @@ EIP-4844 introduces the `BLOBHASH` opcode with a gas cost of 3. Contracts can us
 A precompile at 0x0A that verifies a KZG proof which claims that a blob (represented by a commitment) evaluates to a given value at a given point. Each invocation costs 50000 gas.
 
 **Demo code in EIP-4844**:
+
 ```python
 def point_evaluation_precompile(input: Bytes) -> Bytes:
     """
@@ -614,35 +702,44 @@ calldata = append(calldata, claim[:]...)
 calldata = append(calldata, commitment[:]...)
 calldata = append(calldata, proof[:]...)
 
-gasLimit, err := client.EstimateGas(context.Background(), ethereum.CallMsg{
-	From:      fromAddress,
-	To:        &pointEvaluationPrecompileAddress,
-	GasFeeCap: gasFeeCap,
-	GasTipCap: gasTipCap,
-	Value:     big.NewInt(0),
-	Data:      calldata,
-})
-if err != nil {
-	log.Crit("failed to estimate gas", "err", err)
-}
+// ... Construct other fields ...
 
-tx := types.NewTx(&types.DynamicFeeTx{
+dynamicFeeTx := &types.DynamicFeeTx{
 	ChainID:   chainID,
 	Nonce:     nonce,
 	GasTipCap: gasTipCap,
 	GasFeeCap: gasFeeCap,
-	Gas:       gasLimit,
+	Gas:       gasLimitWithAccessList,
 	To:        &pointEvaluationPrecompileAddress,
 	Value:     big.NewInt(0),
 	Data:      calldata,
-})
+}
+
+if accessList != nil {
+	dynamicFeeTx.AccessList = *accessList
+}
+
+auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
+if err != nil {
+	log.Crit("failed to create transactor", "chainID", chainID, "err", err)
+}
+
+signedTx, err := auth.Signer(auth.From, types.NewTx(dynamicFeeTx))
+if err != nil {
+	log.Crit("failed to sign the transaction", "err", err)
+}
+
+err = ethClient.SendTransaction(context.Background(), signedTx)
+if err != nil {
+	log.Crit("failed to send transaction", "err", err)
+}
 ```
 
 [Full implementation](./invoke-EIP-4844-point-evaluation-precompile/main.go): run with `go run main.go`.
 
 [A successful example (with valid calldata)](https://sepolia.etherscan.io/tx/0x021e5ee48c1eaa747ff4fd4bdffc5cd595d9fff7c2447a7aabca00fa1605f6fc): calldata + transfer (21000) + point evaluation precompile (50000).
 
-[A failed example (without calldata)](https://sepolia.etherscan.io/tx/0x8236fa15da85272a47ed390491fafc28447db8af9057ccb3bd0c3ce2047559a7): reverted, consuming all provided gas.
+[A failed example (without calldata)](https://sepolia.etherscan.io/tx/0x8236fa15da85272a47ed390491fafc28447db8af9057ccb3bd0c3ce2047559a7): failed, consuming all provided gas.
 
 #### Call Point Evaluation Precompile within a Contract
 
@@ -693,37 +790,23 @@ contract PointEvaluationPrecompileDemo {
 }
 ```
 
-[Deployed Contract Address](https://sepolia.etherscan.io/address/0x45d38ded8a95656f72be2bd4de44f33e10eba1da): Verification of the contract code is not yet available because Etherscan and Blockscout lack support for `EVM VERSION: cancun`. [e.g.,](https://sepolia.etherscan.io/address/0x45d38ded8a95656f72be2bd4de44f33e10eba1da#code)
-```assembly
-'fe'(Unknown Opcode)
-LOG2
-PUSH5 0x6970667358
-'22'(Unknown Opcode)
-SLT
-SHA3
-'b1'(Unknown Opcode)
-PUSH25 0x82b1641cca545969b8e7de1dc1b6c11c110b36a71d2dda89e8
-'b3'(Unknown Opcode)
-```
+[Deployed Contract Address](https://sepolia.etherscan.io/address/0x45d38ded8a95656f72be2bd4de44f33e10eba1da): [the contract code is verified on Etherscan](https://sepolia.etherscan.io/address/0x45d38ded8a95656f72be2bd4de44f33e10eba1da#code).
 
-
-[Invode Contract with Go SDK](./invoke-EIP-4844-demo-contract/main.go): hard coded gas limit because Geth's EstimateGas Implementation with contract call that internally invokes `blobhash` opcode has an issue (`blobhash` field is not transferred by RPC), and hopefully this has been fixed in [v1.13.13 release of geth](https://github.com/ethereum/go-ethereum/releases/tag/v1.13.13).
-
-[A Successful Example](https://sepolia.etherscan.io/tx/0x813b770e73d3cec73977437c3d52ef3b511982e9e8b71b63e4a557061afd0ca1#eventlog).
+[A Successful Example](https://sepolia.etherscan.io/tx/0xa207f9fa855e10149b328117b809fd13de96579ac9c1c06b7af810e6cc7c2d4b#eventlog).
 
 [A Failed Example](https://sepolia.etherscan.io/tx/0xe0d210944193a52b7999532e6a91761dd2d0d71c4e5dcf9c06f09a65df4f7d45#eventlog): set the first byte in claim array to 0, the contract returns error with: `error verifying kzg proof: can’t verify opening proof` [Code Ref](https://github.com/ethereum/go-ethereum/blob/93c541ad563124e81d125c7ebe78938175229b2e/core/vm/contracts.go#L1123-L1125).
 
 ## Blob Explorers
 
-- **Blobscan**: [Sepolia](https://sepolia.blobscan.com) and [Goerli](https://goerli.blobscan.com).
+- **Blobscan**: [Mainnet](https://blobscan.com) and [Sepolia](https://sepolia.blobscan.com).
     - **Block**: blob size, blob gas price, blob gas used, blob gas limit, blob as calldata gas, etc.
-    - **Transaction**: total blob size, blob fee, blob gas used, blob gas price, blob as calldata gas, etc.
-    - **Blob**: versioned hash, commitment, size, data, etc.
-    - **Metrics**:
-        - **Block**: number of blocks, blob gas used, blob fees, blob gas price, fees saved, gas saved, etc.
-        - **Transaction**: number of transactions, blob gas fee, unique senders, unique receivers, etc.
-        - **Blob**: number of blobs, unique blobs, blob size, average blob size, etc.
-    - **[Open-sourced](https://github.com/Blobscan)**: [supporting private deployment](https://docs.blobscan.com/docs/installation).
+    - **Transaction**: total blob size, blob gas price, blob fee, blob gas used, blob as calldata gas used, blob as calldata gas fee, etc.
+    - **Blob**: versioned hash, status, commitment, proof, size, blob data, etc.
+    - **Stats Overview**:
+        - **Block**: daily blocks, daily blob gas used, daily blob gas expenditure comparison (with calldata), daily blob fees, daily avg. blob fee, daily avg. blob gas price, etc.
+        - **Transaction**: daily transactions, daily unique addresses, daily avg. max blob gas fee, etc.
+        - **Blob**: daily blobs, daily blob size, etc.
+    - **[Open-sourced](https://github.com/Blobscan)**: [supporting self-hosting deployment](https://docs.blobscan.com/docs/installation).
 
 ## Querying Blob Content
 
@@ -737,10 +820,11 @@ If all nodes are down, users can run a node on their own, syncing from DA to rec
   - [Lighthouse Example](./query-blob-content/lighthouse.txt).
   - [Prysm Example](./query-blob-content/prysm.txt).
 
-> **Note**: Popular RPC providers don't have great support for consensus client APIs.
+- [List of Ethereum beacon chain RPC providers](https://docs.arbitrum.io/run-arbitrum-node/l1-ethereum-beacon-chain-rpc-providers#list-of-ethereum-beacon-chain-rpc-providers), some of them provide historical blob data.
 
 ### Blob Service Providers
 - [Blobscan Example](./query-blob-content/blobscan.txt).
+- [Blocknative Example](./query-blob-content/blocknative.txt).
 
 > **Note**: After fetching the blob data, kzg commitment, and kzg proof, you can verify blob content (because blob hash is stored on-chain) locally and don't need to "trust" the service provider.
 
